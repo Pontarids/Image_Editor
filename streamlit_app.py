@@ -7,13 +7,16 @@ import cv2
 import numpy as np
 import os
 import asyncio
-from pyngrok import ngrok
+from pyngrok import ngrok, conf
 import threading
 import webbrowser
 
 # Set page configuration
 st.set_page_config(page_title="Image Editor", layout="wide")
 st.title("IMAGE EDITOR")
+
+# Set custom pyngrok configuration to use a writable directory
+conf.get_default().config_path = os.path.join(os.path.expanduser("~"), ".ngrok2", "ngrok.yml")
 
 def remove_and_replace_background(subject, background, blur_radius, replace_background, use_color_picker, color):
     with open(subject, 'rb') as subject_img_file:
