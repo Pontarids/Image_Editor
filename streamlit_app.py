@@ -11,6 +11,10 @@ from pyngrok import ngrok
 import threading
 import webbrowser
 
+# Set page configuration
+st.set_page_config(page_title="Image Editor", layout="wide")
+st.title("IMAGE EDITOR")
+
 def remove_and_replace_background(subject, background, blur_radius, replace_background, use_color_picker, color):
     with open(subject, 'rb') as subject_img_file:
         subject_img = subject_img_file.read()
@@ -187,8 +191,6 @@ def run_iopaint_server(ngrok_token, model, device, enable_interactive_seg, inter
     result = start_iopaint(ngrok_token, model, device, enable_interactive_seg, interactive_seg_model, enable_remove_bg, remove_bg_model, enable_realesrgan, realesrgan_model, enable_gfpgan, enable_restoreformer)
     return result
 
-st.title("IMAGE EDITOR")
-
 with st.sidebar:
     selected_tab = st.selectbox("Choose Tab", ["Remove and Replace Background", "Upscale Image", "Gray", "Brightness and Darkness", "Rotate Image", "IOPaint"])
 
@@ -274,5 +276,4 @@ elif selected_tab == "IOPaint":
         st.text(result)
 
 if __name__ == '__main__':
-    st.set_page_config(page_title="Image Editor", layout="wide")
     st.title("Image Editor")
