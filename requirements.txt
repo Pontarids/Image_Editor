@@ -1,0 +1,7 @@
+streamlit
+rembg
+Pillow
+requests
+opencv-python-headless
+numpy
+pyngrok
