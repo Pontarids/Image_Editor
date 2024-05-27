@@ -1,4 +1,4 @@
-import gradio as gr
+import streamlit as st
 from rembg import remove
 from PIL import Image as PILImage, ImageFilter
 from io import BytesIO
@@ -70,26 +70,23 @@ def upscale_image(input_image_path, output_image_path, engine_id, api_key, api_h
     cv2.imwrite(output_image_path, img_np)
     return output_image_path
 
-def upscale_gradio(input_image):
+def upscale_streamlit(input_image):
     output_image_path = "upscaled_image.png"
     input_image_path = "input_image.png"
 
-    if np.max(input_image) > 1:
-        cv2.imwrite(input_image_path, np.array(input_image))
-    else:
-        cv2.imwrite(input_image_path, np.array(input_image) * 255)
+    cv2.imwrite(input_image_path, np.array(input_image)[:, :, ::-1])
 
     upscale_image(input_image_path, output_image_path, "esrgan-v1-x2plus", "sk-snxMfG2LVsLyezE46G9GSxgEBMy9a2rBVsIBQWCrd3n6L5pP", width=1024)
     return output_image_path
 
 def gray(input_img):
     image_path = 'image_gray.png'
-    image = cv2.cvtColor(input_img, cv2.COLOR_RGB2GRAY)
+    image = cv2.cvtColor(np.array(input_img)[:, :, ::-1], cv2.COLOR_RGB2GRAY)
     cv2.imwrite(image_path, image)
     return image_path
 
 def adjust_brightness_and_darkness(input_img, brightness_enabled, brightness_value, darkness_enabled, darkness_value):
-    image = input_img.copy()
+    image = np.array(input_img)[:, :, ::-1].copy()
 
     if brightness_enabled:
         mat = np.ones(image.shape, dtype='uint8') * brightness_value
@@ -106,9 +103,10 @@ def adjust_brightness_and_darkness(input_img, brightness_enabled, brightness_val
 
 def rotate_image(img_input, degrees):
     image_path = 'rotated.png'
-    height, width = img_input.shape[:2]
+    image = np.array(img_input)[:, :, ::-1]
+    height, width = image.shape[:2]
     rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), degrees, 1)
-    rotated_image = cv2.warpAffine(img_input, rotation_matrix, (width, height))
+    rotated_image = cv2.warpAffine(image, rotation_matrix, (width, height))
     rotated_image_rgb = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2RGB)
     cv2.imwrite(image_path, rotated_image_rgb)
     return image_path
@@ -189,80 +187,92 @@ def run_iopaint_server(ngrok_token, model, device, enable_interactive_seg, inter
     result = start_iopaint(ngrok_token, model, device, enable_interactive_seg, interactive_seg_model, enable_remove_bg, remove_bg_model, enable_realesrgan, realesrgan_model, enable_gfpgan, enable_restoreformer)
     return result
 
-with gr.Blocks() as demo:
-    gr.Markdown("IMAGE EDITOR")
-    
-    with gr.Tab("Remove and Replace Background"):
-        subject_img_input = gr.Image(type="filepath")
-        background_img_input = gr.Image(type="filepath")
-        blur_radius_slider = gr.Slider(0, 100, label="Blur Radius")
-        replace_bg_checkbox = gr.Checkbox(label="Replace Background")
-        use_color_picker_checkbox = gr.Checkbox(label="Use Color Picker")
-        color_picker = gr.ColorPicker(label="Background Color")
-        processed_img_output = gr.Image()
-        submit_button = gr.Button("Submit")
-        submit_button.click(remove_and_replace_background, inputs=[subject_img_input, background_img_input, blur_radius_slider, replace_bg_checkbox, use_color_picker_checkbox, color_picker], outputs=processed_img_output)
-    
-    with gr.Tab("Upscale Image"):
-        img_input_upscale = gr.Image()
-        img_output_upscale = gr.Image()
-        img_button_upscale = gr.Button("Submit")
-        img_button_upscale.click(upscale_gradio, inputs=img_input_upscale, outputs=img_output_upscale)
-    
-    with gr.Tab("Gray"):
-        img_input_gray = gr.Image()
-        img_output_gray = gr.Image()
-        img_button_gray = gr.Button("Submit")
-        img_button_gray.click(gray, inputs=img_input_gray, outputs=img_output_gray)
-    
-    with gr.Tab("Brightness and Darkness"):
-        img_input_contrast = gr.Image()
-        brightness_checkbox = gr.Checkbox(label="Enable Brightness Adjustment")
-        brightness_slider = gr.Slider(0, 255, label="Brightness Value")
-        darkness_checkbox = gr.Checkbox(label="Enable Darkness Adjustment")
-        darkness_slider = gr.Slider(0, 255, label="Darkness Value")
-        img_output_contrast = gr.Image()
-        img_button_contrast = gr.Button("Submit")
-        img_button_contrast.click(adjust_brightness_and_darkness, inputs=[img_input_contrast, brightness_checkbox, brightness_slider, darkness_checkbox, darkness_slider], outputs=img_output_contrast)
-    
-    with gr.Tab("Rotate Image"):
-        temp_slider = gr.Slider(minimum=0, maximum=360, value=90, step=90, interactive=True, label="Slide me")
-        img_input_rotate = gr.Image()
-        img_output_rotate = gr.Image()
-        img_button_rotate = gr.Button("Submit")
-        img_button_rotate.click(rotate_image, inputs=[img_input_rotate, temp_slider], outputs=img_output_rotate)
-    
-    with gr.Tab("IOPaint"):
-        gr.Markdown("## Object Remover Use IOPaint, Thanks to https://github.com/Sanster/IOPaint For This Tool")
+st.title("IMAGE EDITOR")
 
-        with gr.Column():
-            gr.Markdown("### This Is a Video For How To Get Ngrok Token")
-            ngrok_video_button = gr.Button("Click Here")
-            ngrok_video_button.click(lambda: webbrowser.open_new_tab("https://youtu.be/rRBNdwTQ9HQ?si=TsZIp6vWxPbsIfXz"))
+with st.sidebar:
+    selected_tab = st.selectbox("Choose Tab", ["Remove and Replace Background", "Upscale Image", "Gray", "Brightness and Darkness", "Rotate Image", "IOPaint"])
 
-            ngrok_token_input = gr.Textbox(label="Insert Ngrok Token")
-            model_input = gr.Dropdown(choices=["lama", "mat", "migan", "runwayml/stable-diffusion-inpainting", "Sanster/PowerPaint-V1-stable-diffusion-inpainting", "Uminosachi/realisticVisionV51_v51VAE-inpainting", "Sanster/anything-4.0-inpainting", "redstonehero/dreamshaper-inpainting", "Sanster/AnyText", "timbrooks/instruct-pix2pix", "Fantasy-Studio/Paint-by-Example"], label="Model", value="lama")
-            device_input = gr.Dropdown(choices=["cuda", "cpu"], label="Device", value="cpu")
-            enable_interactive_seg_input = gr.Checkbox(label="Enable Interactive Segmentation")
-            interactive_seg_model_input = gr.Dropdown(choices=["sam_hq_vit_b", "sam_hq_vit_l", "sam_hq_vit_h"], label="Interactive Segmentation Model", value="sam_hq_vit_b")
-            enable_remove_bg_input = gr.Checkbox(label="Enable Remove Background")
-            remove_bg_model_input = gr.Dropdown(choices=["u2net", "u2netp", "u2net_human_seg", "u2net_cloth_seg", "silueta", "isnet-general-use", "briaai/RMBG-1.4"], label="Remove Background Model", value="briaai/RMBG-1.4")
-            enable_realesrgan_input = gr.Checkbox(label="Enable RealESRGAN")
-            realesrgan_model_input = gr.Dropdown(choices=["realesr-general-x4v3", "RealESRGAN_x4plus", "RealESRGAN_x4plus_anime_6B"], label="RealESRGAN Model", value="realesr-general-x4v3")
-            enable_gfpgan_input = gr.Checkbox(label="Enable GFPGAN")
-            enable_restoreformer_input = gr.Checkbox(label="Enable RestoreFormer")
+if selected_tab == "Remove and Replace Background":
+    st.header("Remove and Replace Background")
+    subject_img_input = st.file_uploader("Upload Subject Image", type=["jpg", "jpeg", "png"])
+    background_img_input = st.file_uploader("Upload Background Image", type=["jpg", "jpeg", "png"])
+    blur_radius = st.slider("Blur Radius", 0, 100)
+    replace_bg = st.checkbox("Replace Background")
+    use_color_picker = st.checkbox("Use Color Picker")
+    color = st.color_picker("Background Color")
+    if st.button("Submit"):
+        if subject_img_input:
+            subject_img_path = subject_img_input.name
+            with open(subject_img_path, "wb") as f:
+                f.write(subject_img_input.getbuffer())
+            if background_img_input:
+                background_img_path = background_img_input.name
+                with open(background_img_path, "wb") as f:
+                    f.write(background_img_input.getbuffer())
+                output_path = remove_and_replace_background(subject_img_path, background_img_path, blur_radius, replace_bg, use_color_picker, color)
+            else:
+                output_path = remove_and_replace_background(subject_img_path, None, blur_radius, replace_bg, use_color_picker, color)
+            st.image(output_path)
 
-            run_button = gr.Button("Start IOPaint Server")
-            output_text = gr.Textbox()
+elif selected_tab == "Upscale Image":
+    st.header("Upscale Image")
+    img_input_upscale = st.file_uploader("Upload Image to Upscale", type=["jpg", "jpeg", "png"])
+    if st.button("Submit"):
+        if img_input_upscale:
+            input_image = PILImage.open(img_input_upscale)
+            output_path = upscale_streamlit(input_image)
+            st.image(output_path)
 
-            run_button.click(
-                run_iopaint_server,
-                inputs=[
-                    ngrok_token_input, model_input, device_input, enable_interactive_seg_input, interactive_seg_model_input, 
-                    enable_remove_bg_input, remove_bg_model_input, enable_realesrgan_input, realesrgan_model_input, 
-                    enable_gfpgan_input, enable_restoreformer_input
-                ],
-                outputs=output_text
-            )
+elif selected_tab == "Gray":
+    st.header("Convert Image to Gray")
+    img_input_gray = st.file_uploader("Upload Image to Convert to Gray", type=["jpg", "jpeg", "png"])
+    if st.button("Submit"):
+        if img_input_gray:
+            input_image = PILImage.open(img_input_gray)
+            output_path = gray(input_image)
+            st.image(output_path)
 
-demo.launch(share=True)
+elif selected_tab == "Brightness and Darkness":
+    st.header("Adjust Brightness and Darkness")
+    img_input_contrast = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
+    brightness_enabled = st.checkbox("Enable Brightness Adjustment")
+    brightness_value = st.slider("Brightness Value", 0, 255)
+    darkness_enabled = st.checkbox("Enable Darkness Adjustment")
+    darkness_value = st.slider("Darkness Value", 0, 255)
+    if st.button("Submit"):
+        if img_input_contrast:
+            input_image = PILImage.open(img_input_contrast)
+            output_path = adjust_brightness_and_darkness(input_image, brightness_enabled, brightness_value, darkness_enabled, darkness_value)
+            st.image(output_path)
+
+elif selected_tab == "Rotate Image":
+    st.header("Rotate Image")
+    img_input_rotate = st.file_uploader("Upload Image to Rotate", type=["jpg", "jpeg", "png"])
+    degrees = st.slider("Rotation Angle", 0, 360, 90)
+    if st.button("Submit"):
+        if img_input_rotate:
+            input_image = PILImage.open(img_input_rotate)
+            output_path = rotate_image(input_image, degrees)
+            st.image(output_path)
+
+elif selected_tab == "IOPaint":
+    st.header("Start IOPaint Server")
+    ngrok_token = st.text_input("Insert Ngrok Token")
+    model = st.selectbox("Model", ["lama", "mat", "migan", "runwayml/stable-diffusion-inpainting", "Sanster/PowerPaint-V1-stable-diffusion-inpainting", "Uminosachi/realisticVisionV51_v51VAE-inpainting", "Sanster/anything-4.0-inpainting", "redstonehero/dreamshaper-inpainting", "Sanster/AnyText", "timbrooks/instruct-pix2pix", "Fantasy-Studio/Paint-by-Example"])
+    device = st.selectbox("Device", ["cuda", "cpu"])
+    enable_interactive_seg = st.checkbox("Enable Interactive Segmentation")
+    interactive_seg_model = st.selectbox("Interactive Segmentation Model", ["sam_hq_vit_b", "sam_hq_vit_l", "sam_hq_vit_h"])
+    enable_remove_bg = st.checkbox("Enable Remove Background")
+    remove_bg_model = st.selectbox("Remove Background Model", ["u2net", "u2netp", "u2net_human_seg", "u2net_cloth_seg", "silueta", "isnet-general-use", "briaai/RMBG-1.4"])
+    enable_realesrgan = st.checkbox("Enable RealESRGAN")
+    realesrgan_model = st.selectbox("RealESRGAN Model", ["realesr-general-x4v3", "RealESRGAN_x4plus", "RealESRGAN_x4plus_anime_6B"])
+    enable_gfpgan = st.checkbox("Enable GFPGAN")
+    enable_restoreformer = st.checkbox("Enable RestoreFormer")
+
+    if st.button("Start IOPaint Server"):
+        result = run_iopaint_server(ngrok_token, model, device, enable_interactive_seg, interactive_seg_model, enable_remove_bg, remove_bg_model, enable_realesrgan, realesrgan_model, enable_gfpgan, enable_restoreformer)
+        st.text(result)
+
+if __name__ == '__main__':
+    st.set_page_config(page_title="Image Editor", layout="wide")
+    st.title("Image Editor")
